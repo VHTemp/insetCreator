@@ -76,6 +76,7 @@ for (img = 0; img < imgList.length; img++) {
 		title = correctGetTitle(); //To remove space in the image name if present
 		typeImage = checkImageType();
 		imgHeight = getHeight();
+		imgSlices = nSlices();
 		
 		if (firstImage) {
 			if (!preexistingSetting) {
@@ -112,14 +113,14 @@ for (img = 0; img < imgList.length; img++) {
 			Dialog.addNumber("Image height in mm", size);
 			Dialog.addNumber("DPI for image import", dpi);
 			Dialog.addChoice("Format of the image", newArray("SVG","TIFF"), format);
-			Dialog.addChoice("If saving in SVG: ", newArray("Export all images as SVG","Export Z-slices as SVGs"), "Export all images as SVG");
+			Dialog.addChoice("If several slices: ", newArray("Export max-z projection","Export individual slice"), "Export individual slice");
 			Dialog.addMessage("");
 			Dialog.addMessage("Note regarding image saving:");
 			Dialog.addMessage("Initially, Inkscape uses a resolution of 96 dpi,\nwhile Illustrator uses a resolution of 72 dpi\nwhen importing images.");
 			Dialog.addMessage("In Inkscape, you can adjust the import resolution to ensure that the specified size is respected\n(Edit > Preferences > Import/Export > Import Resolution)\nIt does not work with Illustrator");
 			Dialog.addMessage("Moreover, the specified size will only be preserved if the image is saved as\na TIFF (in which case, the scale bars and inset rectangles cannot be\nmodified). If you want to be able to modify the scale bars and inset\nrectangles, you must select SVG as the save format.");
 			Dialog.show();
-	
+			
 			scLength = Dialog.getNumber();
 			iscLength = Dialog.getNumber();
 			scThickness = Dialog.getNumber();
@@ -130,7 +131,7 @@ for (img = 0; img < imgList.length; img++) {
 			size = Dialog.getNumber();
 			dpi = Dialog.getNumber();
 			format = Dialog.getChoice();
-			svgExportType = Dialog.getChoice();
+			sliceExport = Dialog.getChoice();
 			
 			// Define RGBcolor here that will be used for create inset
 			if (scColor=="Black") {
@@ -274,14 +275,16 @@ for (img = 0; img < imgList.length; img++) {
 			eval("script", "importClass(Packages.inset.creator.InsetProcessor); InsetProcessor.createInset();");
 			if (checkROI) checkInserDone();
 			rename("Inset-" +inset+1+ "-"+title);
-			selectImage(title);
+			if (imgSlices>1) stackSplitOrZProjection(sliceExport);
 		}
 	
 		if (roiManager("count") > 0 && saveInsetROI) roiManager("save", inputDir+"inset.zip");
 		
+		setBatchMode("hide");
 		selectImage(title);
 		makeRectangle(0, 0, 0, 0);
 		rename("Mod-"+title);
+		if (imgSlices>1) stackSplitOrZProjection(sliceExport);
 		
 		//Scale down the image and draw scalebar
 		if (scAskColor) {
@@ -305,11 +308,10 @@ for (img = 0; img < imgList.length; img++) {
 			if (channels > 1) setSlice(1);
 			if (slices > 1) {
 				run("Stack to Images");
-			
+				sliceWdArray = getList("image.titles");
 			}
 			
-			function createScaleBarAndScaleDown() {
-				if (wdArray[wd].contains("Mod-")) {
+			if (wdArray[wd].contains("Mod-")) {
 				run("Scale Bar...", "width="+scLength+" height=0 thickness="+scThickness+" font="+scFond+" color="+scColor+" bold overlay");
 			} else {
 				run("Scale Bar...", "width="+iscLength+" height=0 thickness="+scThickness+" font="+scFond+" color="+scColor+" bold overlay");
@@ -322,15 +324,10 @@ for (img = 0; img < imgList.length; img++) {
 			run("Scale...", "x=" +ratio+ " y=" +ratio+ " interpolation=Bicubic average create");
 			close(wdArray[wd]);
 			rename(wdArray[wd]);
-			}
 		}
 	
-	if (format == "SVG") {
-		if (svgExportType == "Export all images as SVG") {
-		run("Export all images as SVG");
-	} else if(svgExportType == "Export Z-slices as SVGs") {
-		run("Export Z-slices as SVGs");
-	}
+	
+	if (format == "SVG") run("Export all images as SVG");
 	
 	if (format == "TIFF") {
 		for (wd = 0; wd < wdArray.length; wd++) {
@@ -378,6 +375,7 @@ for (img = 0; img < imgList.length; img++) {
 		close("settingInsetCreator.csv");
 		run("Close All");
 		firstImage = false;
+		setBatchMode("exit and display");
 		}
 	}
 	
@@ -492,4 +490,12 @@ function colorBalance() {
 	
 	close("temp");
 	roiManager("reset");
+}
+
+function stackSplitOrZProjection(sliceExport) {
+	if (sliceExport == "Export individual slice") {
+		run("Stack to Images");
+	} else if (sliceExport == "Export max-z projection") {
+		run("Z Project...", "projection=[Max Intensity]");
+	}
 }
